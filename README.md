@@ -155,6 +155,9 @@ the application beside an `Applications` symlink, so installing is the usual dra
 across. See [docs/PRIVATE-RELEASE.md](docs/PRIVATE-RELEASE.md) for tagging,
 attaching it to a private release, and the first-launch Gatekeeper step.
 
+Pushing a tag builds the image on an Apple Silicon runner and attaches it to a
+pre-release, so the disk image can be produced without building locally at all.
+
 Every stage is also an ordinary npm script, if you would rather drive them
 individually:
 

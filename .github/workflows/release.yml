@@ -1,0 +1,94 @@
+name: build release image
+
+# Builds the application and its disk image on a real Apple Silicon runner, then
+# attaches the image to a release on this (private) repository. This is also the
+# only place the macOS-only build path runs automatically, so a tag push is what
+# proves packaging, imaging and signing still work.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # macOS runners are billed at a higher rate than Linux ones; this job is
+    # deliberately tag-triggered rather than running on every push.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          # The preserved installer is the pinned build input; without the LFS
+          # objects bootstrap falls back to downloading it.
+          lfs: true
+
+      - name: Confirm the runner is Apple Silicon
+        run: |
+          arch="$(uname -m)"
+          if [ "$arch" != "arm64" ]; then
+            echo "This build requires an Apple Silicon runner, got $arch." >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.5.0
+          cache: npm
+
+      - name: Install the locked dependency graph
+        run: npm ci --no-audit --no-fund
+
+      - name: Hydrate the checksum-pinned build input
+        run: npm run bootstrap
+
+      - name: Run source and publication checks
+        run: npm run check
+
+      - name: Package the application
+        run: node scripts/package-macos.mjs
+
+      - name: Verify the packaged application
+        run: npm run verify
+
+      - name: Build the disk image
+        run: npm run package:dmg -- --force
+
+      - name: Collect the image and its checksum
+        id: image
+        run: |
+          image="$(ls dist/*.dmg)"
+          echo "path=$image" >> "$GITHUB_OUTPUT"
+          shasum -a 256 -c "$image.sha256"
+
+      # Uploaded regardless of whether a release is created, so a
+      # workflow_dispatch run still yields an installable build.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: disk-image
+          path: |
+            dist/*.dmg
+            dist/*.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach the image to a pre-release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Reconstructed build. Unsigned and not notarized: see docs/PRIVATE-RELEASE.md for the first-launch step." \
+            --prerelease \
+            "${{ steps.image.outputs.path }}" \
+            "${{ steps.image.outputs.path }}.sha256"

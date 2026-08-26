@@ -25,6 +25,25 @@ The build verifies the application's signature before imaging it, so a bundle
 that fails verification is never handed out. The recorded SHA-256 is what the
 receiving machine should check.
 
+## Letting CI build it
+
+`.github/workflows/release.yml` does all of the above on an Apple Silicon
+runner. Pushing a tag builds the application, runs the checks, verifies the
+packaged bundle, builds the image, and attaches it to a pre-release:
+
+```sh
+git tag -a v0.18.0-reconstructed.1 -m "Reconstructed 0.18.0"
+git push origin v0.18.0-reconstructed.1
+```
+
+`workflow_dispatch` runs the same build against an existing tag without
+creating a release; the image is still uploaded as a workflow artifact.
+
+This is also the only place the macOS-only build path runs automatically, so a
+tag push is what proves packaging, imaging, and signing still work. macOS
+runners bill at a higher rate than Linux ones, which is why this is tag
+triggered rather than running on every push.
+
 ## Attaching it to a private release
 
 Releases on a private repository are visible only to people who can see the
