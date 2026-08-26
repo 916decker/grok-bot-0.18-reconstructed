@@ -86,16 +86,14 @@ test("the setup entry points are wired into package.json", async () => {
   assert.equal(manifest.scripts.preinstall, "node scripts/check-node-version.mjs");
 });
 
-// Installing is a local step, but it writes into /Applications, so the guards
-// that keep it from clobbering a working install or the upstream app matter.
-test("the installer refuses to overwrite the upstream app or an existing install", async () => {
+// The installer runs macOS-only tools, so its decisions live in a pure module
+// (covered exhaustively by install-plan.test.mjs) and this file only guards the
+// split: the executor must not reintroduce decisions of its own.
+test("the installer executes a plan rather than deciding for itself", async () => {
   const source = await readFile(path.join(repoRoot, "scripts", "install-app.mjs"), "utf8");
-  assert.match(source, /if \(process\.platform !== "darwin"\)/);
-  assert.match(source, /appName === "Grok Bot\.app"/);
-  assert.match(source, /Re-run with --force to replace it/);
-  // The bundle is verified before it is promoted, and again once in place.
-  assert.ok(
-    source.indexOf("codesign") < source.indexOf("ditto"),
-    "the packaged bundle must verify before it is copied into /Applications",
-  );
+  assert.match(source, /import \{ planInstall \} from "\.\/lib\/install-plan\.mjs"/);
+  assert.match(source, /if \(plan\.error\) throw new Error\(plan\.error\)/);
+  assert.match(source, /--dry-run/);
+  // An unrecognised step must fail loudly instead of being silently skipped.
+  assert.match(source, /Unknown installation step/);
 });

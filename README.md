@@ -140,8 +140,10 @@ npm run install-app
 result launches from Launchpad and Spotlight like any other application. It
 verifies the signature before and after installing, refuses to replace an
 existing install without `--force`, and will not write over the upstream
-`Grok Bot.app`, which keeps its own identity and install. To run the build
-without installing it, open it from `dist/` instead:
+`Grok Bot.app`, which keeps its own identity and install.
+
+Use `npm run install-app -- --dry-run` to print the exact steps without changing
+anything. To run the build without installing it, open it from `dist/` instead:
 
 ```sh
 open "dist/Grok Bot 0.18 Reconstructed.app"
