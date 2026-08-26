@@ -16,7 +16,7 @@ import { access, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { buildDir, outputApp, outputDir, repoRoot, upstreamVersion } from "./lib/config.mjs";
-import { planDmg } from "./lib/dmg-plan.mjs";
+import { planDmg, resolveSigning } from "./lib/dmg-plan.mjs";
 import { run } from "./lib/process.mjs";
 import { SYSTEM_TOOLS } from "./lib/system-tools.mjs";
 
@@ -39,6 +39,17 @@ async function sha256(target) {
   return hash.digest("hex");
 }
 
+// Credentials come from the environment so they are never written into the
+// repository; absent them the build stays ad-hoc signed.
+const signing = resolveSigning({
+  identity: process.env.APPLE_SIGNING_IDENTITY?.trim(),
+  keychainProfile: process.env.APPLE_NOTARY_KEYCHAIN_PROFILE?.trim(),
+  appleId: process.env.APPLE_ID?.trim(),
+  teamId: process.env.APPLE_TEAM_ID?.trim(),
+  appPassword: process.env.APPLE_APP_PASSWORD?.trim(),
+});
+if (signing.warning) console.warn(`Warning: ${signing.warning}`);
+
 const provisionalName = `${path.basename(outputApp).replace(/\.app$/, "")}-${upstreamVersion}.dmg`;
 const plan = planDmg({
   platform: process.platform,
@@ -49,6 +60,7 @@ const plan = planDmg({
   force,
   buildDir,
   distDir: outputDir,
+  signing,
 });
 
 if (plan.error) throw new Error(plan.error);
@@ -59,6 +71,10 @@ const describe = {
   "stage-app": (target) => `copy application into ${target}`,
   "link-applications": (target) => `link /Applications at ${target}`,
   "create-image": (target) => `create disk image: ${target}`,
+  "sign-app": (target) => `sign with ${signing.identity}: ${target}`,
+  "sign-image": (target) => `sign with ${signing.identity}: ${target}`,
+  notarize: (target) => `submit to Apple for notarization: ${target}`,
+  staple: (target) => `staple the notarization ticket to ${target}`,
   checksum: (target) => `record SHA-256 beside ${target}`,
   cleanup: (target) => `remove staging directory: ${target}`,
 };
@@ -98,6 +114,36 @@ for (const step of plan.steps) {
         step.target,
       ]);
       break;
+    case "sign-app":
+      // The hardened runtime is a precondition for notarization. Signing the
+      // bundle deeply replaces the ad-hoc signature the packager applied.
+      await run(SYSTEM_TOOLS.codesign, [
+        "--sign", signing.identity,
+        "--force", "--deep",
+        "--options", "runtime",
+        "--timestamp",
+        step.target,
+      ]);
+      await run(SYSTEM_TOOLS.codesign, ["--verify", "--deep", "--strict", step.target]);
+      break;
+    case "sign-image":
+      await run(SYSTEM_TOOLS.codesign, ["--sign", signing.identity, "--force", "--timestamp", step.target]);
+      break;
+    case "notarize": {
+      const credentials = signing.notarize.keychainProfile
+        ? ["--keychain-profile", signing.notarize.keychainProfile]
+        : [
+            "--apple-id", signing.notarize.appleId,
+            "--team-id", signing.notarize.teamId,
+            "--password", signing.notarize.appPassword,
+          ];
+      console.log("Submitting to Apple for notarization; this can take several minutes.");
+      await run(SYSTEM_TOOLS.xcrun, ["notarytool", "submit", step.target, ...credentials, "--wait"]);
+      break;
+    }
+    case "staple":
+      await run(SYSTEM_TOOLS.xcrun, ["stapler", "staple", step.target]);
+      break;
     case "checksum": {
       const digest = await sha256(step.target);
       await writeFile(`${step.target}.sha256`, `${digest}  ${path.basename(step.target)}\n`, "utf8");
@@ -114,4 +160,9 @@ for (const step of plan.steps) {
 
 console.log(`\nDisk image: ${path.relative(repoRoot, plan.dmgPath)}`);
 console.log("Double-click it, then drag the application to Applications.");
+console.log(
+  signing.mode === "developer-id" && signing.notarize
+    ? "Notarized and stapled: the first launch will not prompt."
+    : "Ad-hoc signed: the first launch needs right-click -> Open. See docs/PRIVATE-RELEASE.md.",
+);
 console.log("See docs/PRIVATE-RELEASE.md to attach it to a private release.");

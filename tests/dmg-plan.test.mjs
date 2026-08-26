@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { planDmg } from "../scripts/lib/dmg-plan.mjs";
+import { planDmg, resolveSigning } from "../scripts/lib/dmg-plan.mjs";
 
 const base = {
   platform: "darwin",
@@ -64,4 +64,71 @@ test("staging is scratch space inside the build directory, not an output", () =>
   const plan = planDmg(base);
   assert.ok(plan.stagingDir.startsWith(`${base.buildDir}/`));
   assert.ok(plan.dmgPath.startsWith(`${base.distDir}/`));
+});
+
+// Signing has two modes: ad-hoc by default, Developer ID plus notarization when
+// credentials exist. Nothing here embeds a credential; the caller supplies them.
+test("without a Developer ID the build stays ad-hoc", () => {
+  const signing = resolveSigning({});
+  assert.equal(signing.mode, "adhoc");
+  const order = actions(planDmg({ ...base, signing }));
+  assert.ok(!order.includes("sign-app"), "ad-hoc builds must not Developer ID sign");
+  assert.ok(!order.includes("notarize"));
+});
+
+test("a Developer ID without notarization credentials warns instead of failing", () => {
+  const signing = resolveSigning({ identity: "Developer ID Application: Example" });
+  assert.equal(signing.mode, "developer-id");
+  assert.equal(signing.notarize, null);
+  assert.match(signing.warning, /silent first launch/);
+  const order = actions(planDmg({ ...base, signing }));
+  assert.ok(order.includes("sign-app"), "signing still happens");
+  assert.ok(!order.includes("notarize"), "notarization needs credentials");
+});
+
+test("a keychain profile is sufficient to notarize", () => {
+  const signing = resolveSigning({ identity: "Developer ID Application: Example", keychainProfile: "grok" });
+  assert.deepEqual(signing.notarize, { keychainProfile: "grok" });
+});
+
+test("an Apple ID notarizes only when team and password are all present", () => {
+  const partial = resolveSigning({ identity: "Developer ID Application: Example", appleId: "a@b.c" });
+  assert.equal(partial.notarize, null);
+  const full = resolveSigning({
+    identity: "Developer ID Application: Example",
+    appleId: "a@b.c",
+    teamId: "TEAM",
+    appPassword: "secret",
+  });
+  assert.deepEqual(full.notarize, { appleId: "a@b.c", teamId: "TEAM", appPassword: "secret" });
+});
+
+test("a notarized build signs, images, notarizes, then staples", () => {
+  const signing = resolveSigning({ identity: "Developer ID Application: Example", keychainProfile: "grok" });
+  const order = actions(planDmg({ ...base, signing }));
+  assert.deepEqual(order, [
+    "verify",
+    "reset-staging",
+    "stage-app",
+    "sign-app",
+    "link-applications",
+    "create-image",
+    "sign-image",
+    "notarize",
+    "staple",
+    "checksum",
+    "cleanup",
+  ]);
+  // The ticket must be stapled after notarization or it will not travel.
+  assert.ok(order.indexOf("notarize") < order.indexOf("staple"));
+  // The image is signed before it is submitted; Apple rejects unsigned input.
+  assert.ok(order.indexOf("sign-image") < order.indexOf("notarize"));
+});
+
+test("only the staged copy is signed, never the packaged output", () => {
+  const signing = resolveSigning({ identity: "Developer ID Application: Example", keychainProfile: "grok" });
+  const plan = planDmg({ ...base, signing });
+  const signApp = plan.steps.find((step) => step.action === "sign-app");
+  assert.ok(signApp.target.startsWith(plan.stagingDir), "signing must not mutate dist/");
+  assert.notEqual(signApp.target, base.outputApp);
 });

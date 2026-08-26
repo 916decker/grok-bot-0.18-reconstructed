@@ -7,4 +7,5 @@ export const SYSTEM_TOOLS = Object.freeze({
   hdiutil: "/usr/bin/hdiutil",
   plutil: "/usr/bin/plutil",
   xattr: "/usr/bin/xattr",
+  xcrun: "/usr/bin/xcrun",
 });
