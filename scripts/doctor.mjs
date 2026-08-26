@@ -18,6 +18,12 @@ const PASS = "pass";
 const FAIL = "fail";
 const WARN = "warn";
 
+// Packaging is macOS-only, but the source checks run anywhere. When packaging is
+// out of scope, the prerequisites that exist only to serve it are reported as
+// warnings so a Linux or Windows contributor still gets a clean, usable result.
+const skipPackage = process.argv.slice(2).includes("--skip-package");
+const packagingSeverity = skipPackage ? WARN : FAIL;
+
 const results = [];
 
 function record(name, status, detail, fix) {
@@ -46,16 +52,18 @@ function checkPlatform() {
   if (platform !== "darwin") {
     record(
       "platform",
-      FAIL,
+      packagingSeverity,
       `${platform}/${arch} cannot build the macOS application`,
-      "Packaging requires macOS on Apple Silicon. Source checks (npm run check) still run anywhere."
+      skipPackage
+        ? "Source checks run here; run npm run package on an Apple Silicon Mac to build the app."
+        : "Packaging requires macOS on Apple Silicon. Use npm run setup -- --skip-package to run the source checks here."
     );
     return;
   }
   if (arch !== "arm64") {
     record(
       "platform",
-      FAIL,
+      packagingSeverity,
       `macOS ${arch} is unsupported`,
       "The pinned upstream build input is darwin-arm64 only. Use an Apple Silicon Mac."
     );
@@ -107,9 +115,9 @@ async function checkGitLfs() {
   if (version == null) {
     record(
       "git-lfs",
-      FAIL,
+      packagingSeverity,
       "git-lfs is not installed",
-      "Install Git LFS (brew install git-lfs) and run git lfs install."
+      "Install Git LFS (brew install git-lfs) and run git lfs install. Only the preserved installer needs it."
     );
     return;
   }
@@ -132,7 +140,7 @@ async function checkPreservedInstaller() {
   if (size < 1024 * 1024) {
     record(
       "pinned-dmg",
-      FAIL,
+      packagingSeverity,
       `${path.relative(repoRoot, archivedDmg)} is an unpulled LFS pointer (${size} bytes)`,
       "Run git lfs install && git lfs pull to fetch the preserved installer."
     );
@@ -223,7 +231,7 @@ const warnings = results.filter((result) => result.status === WARN);
 console.log();
 if (failures.length === 0) {
   console.log(`No blocking problems found (${warnings.length} warning(s)).`);
-  console.log("Next: npm run setup");
+  console.log(skipPackage ? "Next: npm run setup -- --skip-package" : "Next: npm run setup");
 } else {
   console.log(`${failures.length} blocking problem(s) found. Resolve the items marked FAIL, then re-run npm run doctor.`);
   process.exitCode = 1;

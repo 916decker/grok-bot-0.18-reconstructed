@@ -151,9 +151,20 @@ and whether the preserved installer has actually been pulled, with a suggested
 fix for each problem it finds. Run it first whenever setup fails.
 
 The individual stages remain available (`npm run bootstrap`, `npm run check`,
-`npm run package`, `npm run verify`); `npm run setup -- --skip-package` stops
-after the checks, which is useful on non-macOS machines where the packaging
-stage cannot run.
+`npm run package`, `npm run verify`).
+
+Packaging requires macOS on Apple Silicon, but the source checks run anywhere.
+On Linux or Windows:
+
+```sh
+npm ci
+npm run setup -- --skip-package
+```
+
+That skips both packaging and the bootstrap it feeds (bootstrap mounts the
+pinned DMG with `hdiutil`), runs the typechecks and tests, and treats the
+macOS-only prerequisites as warnings rather than failures. Git LFS and the
+preserved installer are only needed when packaging.
 
 `npm run bootstrap` first uses the Git LFS preservation copy of the pinned
 0.18.0 DMG. If that archive is absent, it falls back to the original public URL;
