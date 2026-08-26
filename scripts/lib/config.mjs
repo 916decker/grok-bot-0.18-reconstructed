@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,8 +7,30 @@ const thisDir = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(thisDir, "../..");
 export const sourceAppDir = path.join(repoRoot, "src", "app");
 export const cacheDir = path.join(repoRoot, ".cache");
-export const cachedRuntimeApp = path.join(cacheDir, "runtime", "Grok Bot.app");
-export const cachedDmg = path.join(cacheDir, "downloads", "Grok_Bot_0.18.0.dmg");
+
+// The downloaded DMG and the runtime extracted from it are identical for every
+// checkout of a given upstream version, and together they are the slowest part
+// of a first bootstrap. Keeping them in a per-user location lets a second clone
+// reuse the work instead of re-downloading and re-extracting. The path is
+// version-scoped so a future pin does not collide with this one.
+function resolveSharedCacheDir() {
+  const configured = process.env.GROK_BOT_018_CACHE_DIR?.trim();
+  if (configured) return path.resolve(configured);
+  const home = os.homedir();
+  if (!home) return cacheDir;
+  if (process.platform === "darwin") return path.join(home, "Library", "Caches", "grok-bot-018-reconstructed");
+  if (process.platform === "win32") {
+    const localAppData = process.env.LOCALAPPDATA?.trim() || path.join(home, "AppData", "Local");
+    return path.join(localAppData, "grok-bot-018-reconstructed", "Cache");
+  }
+  const xdgCache = process.env.XDG_CACHE_HOME?.trim() || path.join(home, ".cache");
+  return path.join(xdgCache, "grok-bot-018-reconstructed");
+}
+
+export const upstreamVersion = "0.18.0";
+export const sharedCacheDir = path.join(resolveSharedCacheDir(), upstreamVersion);
+export const cachedRuntimeApp = path.join(sharedCacheDir, "runtime", "Grok Bot.app");
+export const cachedDmg = path.join(sharedCacheDir, "downloads", "Grok_Bot_0.18.0.dmg");
 export const archivedDmg = path.join(repoRoot, "research-archives", "original", "0.18.0", "macos-arm64", "Grok_Bot_0.18.0.dmg");
 export const buildDir = path.join(repoRoot, ".build");
 export const stagedAppDir = path.join(buildDir, "app");
@@ -38,7 +61,6 @@ export const frontendDir = path.join(repoRoot, "frontend");
 export const devOutputApp = path.join(outputDir, "Grok Bot 0.18 Dev.app");
 export const devProfileDir = path.join(cacheDir, "dev-profile");
 
-export const upstreamVersion = "0.18.0";
 export const reconstructedBundleId = "com.anysphere.sand.reconstructed";
 export const reconstructedName = "Grok Bot 0.18 Reconstructed";
 export const fidelityBundleId = "com.anysphere.sand.reconstructed.fidelity";

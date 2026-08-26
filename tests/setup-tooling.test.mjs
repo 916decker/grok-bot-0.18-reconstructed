@@ -52,6 +52,32 @@ test("setup skips the macOS-only bootstrap when packaging is skipped", async () 
   assert.match(source, /skipPackage \? \["run", "doctor", "--", "--skip-package"\] : \["run", "doctor"\]/);
 });
 
+// The DMG and the runtime extracted from it are identical across checkouts, so
+// they live outside the repository and are reused by a second clone. Build
+// outputs stay repo-local so clones cannot corrupt each other's artifacts.
+test("the expensive build inputs are cached per user, not per checkout", async () => {
+  const config = await import("../scripts/lib/config.mjs");
+  for (const shared of [config.cachedDmg, config.cachedRuntimeApp]) {
+    assert.ok(
+      !shared.startsWith(`${config.repoRoot}${path.sep}`),
+      `${shared} must not live inside the checkout`,
+    );
+    assert.ok(shared.includes(config.upstreamVersion), `${shared} must be scoped to the pinned version`);
+  }
+  for (const local of [config.outputApp, config.buildDir, config.sourceAppDir]) {
+    assert.ok(local.startsWith(`${config.repoRoot}${path.sep}`), `${local} must stay in the checkout`);
+  }
+});
+
+test("the shared cache location is overridable", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["-e", "import('./scripts/lib/config.mjs').then(c => console.log(c.cachedDmg))"],
+    { cwd: repoRoot, env: { ...process.env, GROK_BOT_018_CACHE_DIR: path.join(repoRoot, ".cache", "override-probe") } },
+  );
+  assert.match(stdout.trim(), /override-probe/);
+});
+
 test("the setup entry points are wired into package.json", async () => {
   const manifest = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
   assert.equal(manifest.scripts.doctor, "node scripts/doctor.mjs");

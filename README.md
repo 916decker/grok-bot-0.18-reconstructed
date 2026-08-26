@@ -172,6 +172,12 @@ preserved installer are only needed when packaging.
 verifies both the DMG and `app.asar`, caches the matching Electron runtime, and
 hydrates the ignored `src/app/dist` build input.
 
+The DMG and the runtime extracted from it are identical for every checkout of a
+given upstream version, so they are cached per user rather than per clone (under
+`~/Library/Caches/grok-bot-018-reconstructed/0.18.0` on macOS). A second clone
+reuses that work instead of downloading and extracting again. Set
+`GROK_BOT_018_CACHE_DIR` to relocate it. Build outputs stay inside the checkout.
+
 `npm run package` compiles the reconstructed runtimes, applies the narrow
 renderer/settings transform, creates the app bundle, assigns the reconstructed
 bundle identity, ad-hoc signs it, and verifies the result. Output is written to:
