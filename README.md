@@ -132,11 +132,28 @@ cd grok-bot-0.18-reconstructed
 git lfs install
 git lfs pull
 npm ci
-npm run bootstrap
-npm run check
-npm run package
+npm run setup
 open "dist/Grok Bot 0.18 Reconstructed.app"
 ```
+
+`npm run setup` checks the environment, hydrates the pinned build input, runs the
+source checks, and packages the application. It stops at the first failing stage
+and prints the command that failed.
+
+To inspect the environment without building anything:
+
+```sh
+npm run doctor
+```
+
+`npm run doctor` reports the platform, Node version, Git LFS state, Xcode tools,
+and whether the preserved installer has actually been pulled, with a suggested
+fix for each problem it finds. Run it first whenever setup fails.
+
+The individual stages remain available (`npm run bootstrap`, `npm run check`,
+`npm run package`, `npm run verify`); `npm run setup -- --skip-package` stops
+after the checks, which is useful on non-macOS machines where the packaging
+stage cannot run.
 
 `npm run bootstrap` first uses the Git LFS preservation copy of the pinned
 0.18.0 DMG. If that archive is absent, it falls back to the original public URL;

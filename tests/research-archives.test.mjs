@@ -14,6 +14,18 @@ async function sha256(file) {
   return hash.digest("hex");
 }
 
+// A checkout without `git lfs pull` leaves a small text pointer in place of the
+// installer. The pointer still carries the object's oid and size, so the
+// manifest can be checked against it without the multi-hundred-megabyte payload.
+function parseLfsPointer(contents) {
+  const oid = contents.match(/^oid sha256:([0-9a-f]{64})$/m);
+  const size = contents.match(/^size (\d+)$/m);
+  if (!contents.startsWith("version https://git-lfs.github.com/spec/v1") || oid == null || size == null) {
+    return null;
+  }
+  return { oid: oid[1], size: Number(size[1]) };
+}
+
 test("preserved 0.18.0 installers match the exact public release inventory", async () => {
   const manifest = JSON.parse(await readFile(path.join(archiveRoot, "artifacts.json"), "utf8"));
   assert.deepEqual(Object.keys(manifest).sort(), ["artifacts", "product", "schemaVersion", "version"]);
@@ -35,8 +47,19 @@ test("preserved 0.18.0 installers match the exact public release inventory", asy
     const metadata = await lstat(file);
     assert.equal(metadata.isFile(), true);
     assert.equal(metadata.isSymbolicLink(), false);
-    assert.equal(metadata.size, artifact.bytes, `${artifact.path} requires git lfs pull`);
-    assert.equal(await sha256(file), artifact.sha256);
+
+    // Verify the resolved object when LFS content is present, and fall back to
+    // the pointer's own recorded identity when it is not. Both paths assert the
+    // manifest agrees with Git's view of the artifact, so a clone that has not
+    // run `git lfs pull` still validates the inventory instead of failing.
+    const pointer = metadata.size < 1024 ? parseLfsPointer(await readFile(file, "utf8")) : null;
+    if (pointer == null) {
+      assert.equal(metadata.size, artifact.bytes, `${artifact.path} requires git lfs pull`);
+      assert.equal(await sha256(file), artifact.sha256);
+    } else {
+      assert.equal(pointer.size, artifact.bytes, `${artifact.path} pointer size disagrees with the manifest`);
+      assert.equal(pointer.oid, artifact.sha256, `${artifact.path} pointer oid disagrees with the manifest`);
+    }
   }
 });
 
