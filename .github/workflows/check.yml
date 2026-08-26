@@ -19,6 +19,8 @@ jobs:
           cache: npm
       - name: Install the locked dependency graph
         run: npm ci --no-audit --no-fund
+      - name: Verify the preflight reports a usable environment
+        run: npm run doctor -- --skip-package
       - name: Run source and publication checks
         run: npm run check
       - name: Build the editable frontend

@@ -20,6 +20,7 @@
     "package": "npm run check && node scripts/package-macos.mjs",
     "package:diagnostic": "npm run check && node scripts/package-fidelity-diagnostic.mjs",
     "publication:check": "node scripts/verify-publication-tree.mjs",
+    "preinstall": "node scripts/check-node-version.mjs",
     "postinstall": "node scripts/apply-third-party-patches.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test": "node --test tests/*.test.mjs",
