@@ -133,6 +133,17 @@ git lfs install
 git lfs pull
 npm ci
 npm run setup
+npm run install-app
+```
+
+`npm run install-app` copies the packaged bundle into `/Applications`, so the
+result launches from Launchpad and Spotlight like any other application. It
+verifies the signature before and after installing, refuses to replace an
+existing install without `--force`, and will not write over the upstream
+`Grok Bot.app`, which keeps its own identity and install. To run the build
+without installing it, open it from `dist/` instead:
+
+```sh
 open "dist/Grok Bot 0.18 Reconstructed.app"
 ```
 

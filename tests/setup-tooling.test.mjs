@@ -82,4 +82,20 @@ test("the setup entry points are wired into package.json", async () => {
   const manifest = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
   assert.equal(manifest.scripts.doctor, "node scripts/doctor.mjs");
   assert.equal(manifest.scripts.setup, "node scripts/setup.mjs");
+  assert.equal(manifest.scripts["install-app"], "node scripts/install-app.mjs");
+  assert.equal(manifest.scripts.preinstall, "node scripts/check-node-version.mjs");
+});
+
+// Installing is a local step, but it writes into /Applications, so the guards
+// that keep it from clobbering a working install or the upstream app matter.
+test("the installer refuses to overwrite the upstream app or an existing install", async () => {
+  const source = await readFile(path.join(repoRoot, "scripts", "install-app.mjs"), "utf8");
+  assert.match(source, /if \(process\.platform !== "darwin"\)/);
+  assert.match(source, /appName === "Grok Bot\.app"/);
+  assert.match(source, /Re-run with --force to replace it/);
+  // The bundle is verified before it is promoted, and again once in place.
+  assert.ok(
+    source.indexOf("codesign") < source.indexOf("ditto"),
+    "the packaged bundle must verify before it is copied into /Applications",
+  );
 });
