@@ -1,0 +1,31 @@
+#!/bin/sh
+# Fresh clone to a launchable application, in one command.
+#
+#   ./setup              build and install into /Applications
+#   ./setup --skip-package   run the source checks only (any platform)
+#
+# Everything here is also available as individual npm scripts; this exists so a
+# first run does not have to know the sequence. See README.md.
+
+set -eu
+
+cd "$(dirname "$0")"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node is not installed. Install Node $(cat .node-version 2>/dev/null || echo '26.5.x') and re-run ./setup." >&2
+  exit 1
+fi
+
+# Fail on the wrong Node before npm fetches anything, with the same message the
+# install guard uses.
+node scripts/check-node-version.mjs
+
+echo "=== Installing dependencies ==="
+npm ci
+
+# Pass --install through by default so the run ends with a launchable app, while
+# still honouring --skip-package and any other flags the caller supplied.
+case " $* " in
+  *" --skip-package "*) npm run setup -- "$@" ;;
+  *) npm run setup -- --install "$@" ;;
+esac

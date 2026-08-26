@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
@@ -46,10 +46,44 @@ test("--skip-package downgrades packaging-only prerequisites to warnings", async
   assert.ok(["OK", "FAIL"].includes(statusOf(output, "node")));
 });
 
+// The single entry point has to work before dependencies exist, so it may only
+// use the shell and the Node guard, never anything from node_modules.
+test("the one-command entry point is executable and self-sufficient", async () => {
+  const entry = path.join(repoRoot, "setup");
+  const info = await stat(entry);
+  assert.ok((info.mode & 0o111) !== 0, "./setup must be executable");
+
+  const source = await readFile(entry, "utf8");
+  assert.match(source, /^#!\/bin\/sh/);
+  assert.match(source, /set -eu/);
+  // The Node guard runs before npm fetches anything.
+  assert.ok(
+    source.indexOf("check-node-version.mjs") < source.indexOf("npm ci"),
+    "the Node version must be checked before dependencies are installed",
+  );
+  assert.match(source, /--skip-package/);
+});
+
+test("setup can hydrate LFS and chain the install itself", async () => {
+  const source = await readFile(path.join(repoRoot, "scripts", "setup.mjs"), "utf8");
+  // A failed LFS fetch must not stop setup: bootstrap can still use the URL.
+  assert.match(source, /runCommand\("git", \["lfs", "pull"\], \{ optional: true \}\)/);
+  assert.match(source, /installAfterPackaging/);
+  assert.ok(
+    source.indexOf("hydratePreservedInstaller()") < source.indexOf('["run", "bootstrap"]'),
+    "the installer must be fetched before bootstrap consumes it",
+  );
+});
+
 test("setup skips the macOS-only bootstrap when packaging is skipped", async () => {
   const source = await readFile(path.join(repoRoot, "scripts", "setup.mjs"), "utf8");
-  assert.match(source, /if \(!skipPackage\) \{\s*\n\s*await runStage\("Hydrating/);
+  assert.match(source, /if \(!skipPackage\) \{[\s\S]*?\["run", "bootstrap"\][\s\S]*?\n\}/);
   assert.match(source, /skipPackage \? \["run", "doctor", "--", "--skip-package"\] : \["run", "doctor"\]/);
+  // Packaging and the install that follows it are both inside the else branch.
+  assert.ok(
+    source.indexOf('["run", "package"]') > source.indexOf("if (skipPackage) {"),
+    "packaging must not run when it is skipped",
+  );
 });
 
 // The DMG and the runtime extracted from it are identical across checkouts, so

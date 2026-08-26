@@ -129,10 +129,24 @@ Remote mode remains the default.
 ```sh
 git clone <your-repository-url>
 cd grok-bot-0.18-reconstructed
-git lfs install
-git lfs pull
+./setup
+```
+
+`./setup` is the whole first run. It checks the Node version before fetching
+anything, installs dependencies, fetches the preserved installer through Git
+LFS, hydrates the checksum-pinned build input, runs the source checks, packages
+the application, and installs it into `/Applications` — after which it launches
+from Launchpad and Spotlight like any other app.
+
+On Linux or Windows, `./setup --skip-package` runs the source checks and stops,
+since packaging requires macOS on Apple Silicon.
+
+Every stage is also an ordinary npm script, if you would rather drive them
+individually:
+
+```sh
 npm ci
-npm run setup
+npm run setup          # add -- --install to install when it finishes
 npm run install-app
 ```
 
