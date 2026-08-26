@@ -49,12 +49,23 @@ function sha256(value) {
 
 for (const target of targets) {
   const absolute = path.join(repoRoot, target.path);
-  const source = await readFile(absolute, "utf8");
+  let source;
+  try {
+    source = await readFile(absolute, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    // postinstall runs before the tree is guaranteed complete only when an
+    // install failed partway; say so rather than surfacing a bare ENOENT.
+    throw new Error(
+      `Cannot patch ${target.path}: the file is missing. Run npm ci to restore the locked dependency graph.`,
+    );
+  }
   const before = sha256(source);
   if (before === target.patchedSha256) continue;
   if (before !== target.stockSha256) {
     throw new Error(
-      `Refusing to patch unexpected @connectrpc/connect input ${target.path}: ${before}`,
+      `Refusing to patch unexpected input ${target.path}: got ${before}, expected the stock ${target.stockSha256}. `
+        + "This usually means the dependency version changed; update the recorded hashes in scripts/apply-third-party-patches.mjs.",
     );
   }
   let patched;
