@@ -141,6 +141,20 @@ from Launchpad and Spotlight like any other app.
 On Linux or Windows, `./setup --skip-package` runs the source checks and stops,
 since packaging requires macOS on Apple Silicon.
 
+### Installing on another Mac
+
+To avoid running the build on every machine, package a disk image once and
+install it from a release on the private repository:
+
+```sh
+npm run package:dmg
+```
+
+That produces a double-clickable `.dmg` (with a recorded SHA-256) that mounts as
+the application beside an `Applications` symlink, so installing is the usual drag
+across. See [docs/PRIVATE-RELEASE.md](docs/PRIVATE-RELEASE.md) for tagging,
+attaching it to a private release, and the first-launch Gatekeeper step.
+
 Every stage is also an ordinary npm script, if you would rather drive them
 individually:
 
