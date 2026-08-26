@@ -1,7 +1,5 @@
 # Grok Bot 0.18 — reconstructed and extended
 
-![Grok Bot Router settings with Codex selected and local usage totals](docs/assets/router-settings.png)
-
 This repository is an unofficial, source-oriented reconstruction of the
 publicly shipped Grok Bot 0.18.0 macOS app.
 
