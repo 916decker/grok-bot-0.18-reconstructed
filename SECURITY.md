@@ -23,3 +23,27 @@ cleanup.
 
 Please report issues privately to the repository owner rather than opening a
 public disclosure against this experimental codebase.
+
+## Removing the screenshot from published history
+
+`docs/assets/router-settings.png` contained personal account data and has been
+removed from the working tree. It is still reachable in commit `a9f633e`, so the
+history itself needs rewriting:
+
+```sh
+# From a fresh mirror clone, so a mistake cannot damage the working checkout.
+git clone --mirror <repository-url> rewrite.git
+cd rewrite.git
+git filter-repo --invert-paths --path docs/assets/router-settings.png
+git push --force --all
+git push --force --tags
+```
+
+`git filter-repo` replaces every affected commit, so anyone with a clone must
+re-clone afterwards.
+
+Two limits are worth knowing before relying on this. A rewrite does not retract
+copies already fetched or indexed while the repository was public. And commits
+in a fork network stay reachable by SHA through the parent repository even after
+a fork is deleted or made private, so a rewrite on one fork does not necessarily
+remove them. Ask GitHub Support to purge the objects if the exposure matters.
